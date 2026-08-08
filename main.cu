@@ -6,7 +6,17 @@
 #include <iostream>
 #include <vector>
 
-__global__ void vectorAdd(const int*a, const int*b,int* c,int size)
+#define CUDA_CHECK(call)\
+    do \
+    {\
+    cudaError_t error = (call); \
+    if (error != cudaSuccess){ \
+    std::cerr << "CUDA 错误:" << cudaGetErrorString(error)<<"\n"; \
+    std::exit(EXIT_FAILURE);\
+    }\
+    }while (0)
+
+__global__ void vectorAdd(const int* a, const int* b, int* c, int size)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < size)
@@ -15,8 +25,8 @@ __global__ void vectorAdd(const int*a, const int*b,int* c,int size)
     }
 }
 
-int main() {
-
+int main()
+{
     const int size = 32;
 
     int host_a[size], host_b[size];
@@ -35,7 +45,7 @@ int main() {
 
     const std::size_t bytes = size * sizeof(int);
 
-    cudaMalloc(&device_a, bytes);
+    CUDA_CHECK(cudaMalloc(&device_a, bytes));
 
     cudaMalloc(&device_b, bytes);
 
@@ -52,7 +62,7 @@ int main() {
     int block_count = (size + block_size - 1) / block_size;
 
     vectorAdd<<<block_count,block_size>>>(
-    device_a, device_b, device_c, size
+        device_a, device_b, device_c, size
     );
 
     cudaDeviceSynchronize();
