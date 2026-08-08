@@ -6,48 +6,69 @@
 #include <iostream>
 #include <vector>
 
-__global__ void add10(int* data, int size)
+__global__ void vectorAdd(const int*a, const int*b,int* c,int size)
 {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-
     if (i < size)
     {
-        data[i] = data[i] + 10;
+        c[i] = a[i] + b[i];
     }
 }
 
 int main() {
-    constexpr int size = 32;
-    int host_data[size];
+
+    const int size = 32;
+
+    int host_a[size], host_b[size];
+    int host_c[size] = {0};
+
     for (int i = 0; i < size; ++i)
     {
-        host_data[i] = i;
+        host_a[i] = i;
+
+        host_b[i] = i * 10;
     }
 
-    int* device_data;
+    int* device_a = nullptr;
+    int* device_b = nullptr;
+    int* device_c = nullptr;
 
-    cudaMalloc(&device_data, sizeof(host_data));
+    const std::size_t bytes = size * sizeof(int);
 
-    cudaMemcpy(device_data, host_data, sizeof(host_data), cudaMemcpyHostToDevice);
+    cudaMalloc(&device_a, bytes);
+
+    cudaMalloc(&device_b, bytes);
+
+    cudaMalloc(&device_c, bytes);
+
+    cudaMemcpy(device_a, host_a, bytes, cudaMemcpyHostToDevice);
+
+    cudaMemcpy(device_b, host_b, bytes, cudaMemcpyHostToDevice);
+
+    cudaMemcpy(device_c, host_c, bytes, cudaMemcpyHostToDevice);
 
     constexpr int block_size = 8;
 
     int block_count = (size + block_size - 1) / block_size;
 
-    add10<<<block_count, block_size>>>(device_data, size);
+    vectorAdd<<<block_count,block_size>>>(
+    device_a, device_b, device_c, size
+    );
 
     cudaDeviceSynchronize();
 
-    cudaMemcpy(host_data, device_data, sizeof(host_data), cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_a, device_a, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_b, device_b, bytes, cudaMemcpyDeviceToHost);
+    cudaMemcpy(host_c, device_c, bytes, cudaMemcpyDeviceToHost);
 
-    cudaFree(device_data);
-
-    for (int value : host_data)
+    for (int i = 0; i < size; ++i)
     {
-        std::cout << value << " ";
+        std::cout << host_a[i] << " + " << host_b[i] << " = " << host_c[i] << std::endl;
     }
 
-    std::cout << '\n';
+    cudaFree(host_a);
+    cudaFree(host_b);
+    cudaFree(host_c);
 
     return EXIT_SUCCESS;
 }
