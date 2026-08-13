@@ -27,10 +27,11 @@ __global__ void vectorAdd(const int* a, const int* b, int* c, int size)
 
 int main()
 {
-    const int size = 32;
+    const int size = 1000003;
 
-    int host_a[size], host_b[size];
-    int host_c[size] = {0};
+    std::vector<int> host_a(size);
+    std::vector<int> host_b(size);
+    std::vector<int> host_c(size, 0);
 
     for (int i = 0; i < size; ++i)
     {
@@ -47,17 +48,17 @@ int main()
 
     CUDA_CHECK(cudaMalloc(&device_a, bytes));
 
-    cudaMalloc(&device_b, bytes);
+    CUDA_CHECK(cudaMalloc(&device_b, bytes));
 
-    cudaMalloc(&device_c, bytes);
+    CUDA_CHECK(cudaMalloc(&device_c, bytes));
 
-    cudaMemcpy(device_a, host_a, bytes, cudaMemcpyHostToDevice);
+   CUDA_CHECK(cudaMemcpy(device_a, host_a.data(), bytes, cudaMemcpyHostToDevice));
 
-    cudaMemcpy(device_b, host_b, bytes, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(device_b, host_b.data(), bytes, cudaMemcpyHostToDevice));
 
-    cudaMemcpy(device_c, host_c, bytes, cudaMemcpyHostToDevice);
+    CUDA_CHECK(cudaMemcpy(device_c, host_c.data(), bytes, cudaMemcpyHostToDevice));
 
-    constexpr int block_size = 8;
+    constexpr int block_size = 256;
 
     int block_count = (size + block_size - 1) / block_size;
 
@@ -65,20 +66,20 @@ int main()
         device_a, device_b, device_c, size
     );
 
-    cudaDeviceSynchronize();
+    CUDA_CHECK(cudaDeviceSynchronize());
 
-    cudaMemcpy(host_a, device_a, bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(host_b, device_b, bytes, cudaMemcpyDeviceToHost);
-    cudaMemcpy(host_c, device_c, bytes, cudaMemcpyDeviceToHost);
+    CUDA_CHECK(cudaMemcpy(host_a.data(), device_a, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(host_b.data(), device_b, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(host_c.data(), device_c, bytes, cudaMemcpyDeviceToHost));
 
     for (int i = 0; i < size; ++i)
     {
         std::cout << host_a[i] << " + " << host_b[i] << " = " << host_c[i] << std::endl;
     }
 
-    cudaFree(host_a);
-    cudaFree(host_b);
-    cudaFree(host_c);
+    CUDA_CHECK(cudaFree(device_a));
+    CUDA_CHECK(cudaFree(device_b));
+    CUDA_CHECK(cudaFree(device_c));
 
     return EXIT_SUCCESS;
 }
