@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -16,70 +17,136 @@
     }\
     }while (0)
 
-__global__ void vectorAdd(const int* a, const int* b, int* c, int size)
+__global__ void renderMandelbrot(unsigned char* pixels, int width, int height, int max_iterations)
 {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i < size)
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= width || y >= height)
+        return;
+
+    double cx = -2.5 + (static_cast<double>(x) / static_cast<double>(width)) * 3.5;
+
+    double cy = -1.0 + (static_cast<double>(y) / static_cast<double>(height)) * 2.0;
+
+    double zx = 0.0;
+    double zy = 0.0;
+
+    int iteration = 0;
+
+    while (zx * zx + zy * zy <= 4.0 && iteration < max_iterations)
     {
-        c[i] = a[i] + b[i];
+        double new_zx = zx * zx - zy * zy + cx;
+
+        double new_zy = 2.0 * zx * zy + cy;
+
+        zx = new_zx;
+        zy = new_zy;
+
+        ++iteration;
     }
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+
+    if (iteration == max_iterations)
+    {
+        r = 0;
+        g = 0;
+        b = 0;
+    }
+    else
+    {
+        unsigned char value = static_cast<unsigned char>(
+            255.0 * iteration / max_iterations
+        );
+
+        r = value;
+        g = value;
+        b = value;
+    }
+
+    int index = (y * width + x) * 3;
+
+    pixels[index + 0] = r;
+    pixels[index + 1] = g;
+    pixels[index + 2] = b;
 }
 
 int main()
 {
-    const int size = 1000003;
+    const int width = 1920;
 
-    std::vector<int> host_a(size);
-    std::vector<int> host_b(size);
-    std::vector<int> host_c(size, 0);
+    const int height = 1080;
 
-    for (int i = 0; i < size; ++i)
-    {
-        host_a[i] = i;
+    const int max_iterations = 200;
 
-        host_b[i] = i * 10;
-    }
+    const std::size_t image_size = width * height * 3 * sizeof(unsigned char);
 
-    int* device_a = nullptr;
-    int* device_b = nullptr;
-    int* device_c = nullptr;
+    const std::size_t image_bytes = width * height * 3;
 
-    const std::size_t bytes = size * sizeof(int);
+    std::vector<unsigned char> host_pixels(
+        width * height * 3);
 
-    CUDA_CHECK(cudaMalloc(&device_a, bytes));
+    unsigned char* device_pixels = nullptr;
 
-    CUDA_CHECK(cudaMalloc(&device_b, bytes));
+    CUDA_CHECK(cudaMalloc(&device_pixels, image_size));
 
-    CUDA_CHECK(cudaMalloc(&device_c, bytes));
+    dim3 block_size(16, 16);
 
-    CUDA_CHECK(cudaMemcpy(device_a, host_a.data(), bytes, cudaMemcpyHostToDevice));
+    dim3 grid_size((width + block_size.x - 1) / block_size.x, (height + block_size.y - 1) / block_size.y);
 
-    CUDA_CHECK(cudaMemcpy(device_b, host_b.data(), bytes, cudaMemcpyHostToDevice));
 
-    CUDA_CHECK(cudaMemcpy(device_c, host_c.data(), bytes, cudaMemcpyHostToDevice));
+    std::cout << "Grid:" << grid_size.x << "x" << grid_size.y << std::endl;
 
-    constexpr int block_size = 256;
+    std::cout << "Block:" << block_size.x << "x" << block_size.y << std::endl;
 
-    int block_count = (size + block_size - 1) / block_size;
+    renderMandelbrot<<<grid_size, block_size>>>(device_pixels, width, height, max_iterations);
 
-    vectorAdd<<<block_count,block_size>>>(
-        device_a, device_b, device_c, size
-    );
+    CUDA_CHECK(cudaGetLastError());
 
     CUDA_CHECK(cudaDeviceSynchronize());
 
-    CUDA_CHECK(cudaMemcpy(host_a.data(), device_a, bytes, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(host_b.data(), device_b, bytes, cudaMemcpyDeviceToHost));
-    CUDA_CHECK(cudaMemcpy(host_c.data(), device_c, bytes, cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(
+        host_pixels.data(),
+        device_pixels,
+        image_size,
+        cudaMemcpyDeviceToHost
+    ));
 
-    for (int i = 0; i < size; ++i)
+    CUDA_CHECK(cudaFree(device_pixels));
+
+    std::ofstream file(
+        "mandlbrot.ppm",
+        std::ios::binary
+    );
+
+    if (!file)
     {
-        std::cout << host_a[i] << " + " << host_b[i] << " = " << host_c[i] << std::endl;
+        std::cerr << "无法创建 ppm 文件" << std::endl;
+        return EXIT_FAILURE;
     }
 
-    CUDA_CHECK(cudaFree(device_a));
-    CUDA_CHECK(cudaFree(device_b));
-    CUDA_CHECK(cudaFree(device_c));
+    file
+        << "P6\n"
+        << width
+        << " "
+        << height
+        << "\n255\n";
+
+    file.write(
+        reinterpret_cast<const char*>(
+            host_pixels.data()
+        ),
+        static_cast<std::streamsize>(
+            image_bytes
+        )
+    );
+
+    file.close();
+
+    std::cout << "图片保存为 mandelbrot.ppm" << std::endl;
+
 
     return EXIT_SUCCESS;
 }
