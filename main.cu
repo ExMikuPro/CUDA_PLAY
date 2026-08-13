@@ -57,13 +57,74 @@ __global__ void renderMandelbrot(unsigned char* pixels, int width, int height, i
     }
     else
     {
-        unsigned char value = static_cast<unsigned char>(
-            255.0 * iteration / max_iterations
-        );
 
-        r = value;
-        g = value;
-        b = value;
+        // 平滑颜色
+        double magnitude = sqrt(zx * zx + zy * zy);
+
+        double smooth_iteration =
+            iteration + 1.0 - log(log(magnitude)) / log(2.0);
+
+        double t = fmod(smooth_iteration * 0.04, 1.0);
+
+        if (t < 0.4)
+        {
+            // 深蓝黑 -> 初音青绿
+            double k = t / 0.4;
+
+            r = static_cast<unsigned char>(
+                10 + k * (57 - 10)
+            );
+
+            g = static_cast<unsigned char>(
+                18 + k * (197 - 18)
+            );
+
+            b = static_cast<unsigned char>(
+                28 + k * (187 - 28)
+            );
+        }
+        else if (t < 0.75)
+        {
+            // 初音青绿 -> 浅青
+            double k = (t - 0.4) / 0.35;
+
+            r = static_cast<unsigned char>(
+                57 + k * (160 - 57)
+            );
+
+            g = static_cast<unsigned char>(
+                197 + k * (240 - 197)
+            );
+
+            b = static_cast<unsigned char>(
+                187 + k * (235 - 187)
+            );
+        }
+        else
+        {
+            // 浅青 -> 粉色
+            double k = (t - 0.75) / 0.25;
+
+            r = static_cast<unsigned char>(
+                160 + k * (255 - 160)
+            );
+
+            g = static_cast<unsigned char>(
+                240 + k * (100 - 240)
+            );
+
+            b = static_cast<unsigned char>(
+                235 + k * (180 - 235)
+            );
+        }
+
+    int index = (y * width + x) * 3;
+
+    pixels[index + 0] = r;
+    pixels[index + 1] = g;
+    pixels[index + 2] = b;
+
+
     }
 
     int index = (y * width + x) * 3;
