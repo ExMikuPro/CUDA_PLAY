@@ -57,7 +57,6 @@ __global__ void renderMandelbrot(unsigned char* pixels, int width, int height, i
     }
     else
     {
-
         // 平滑颜色
         double magnitude = sqrt(zx * zx + zy * zy);
 
@@ -118,13 +117,11 @@ __global__ void renderMandelbrot(unsigned char* pixels, int width, int height, i
             );
         }
 
-    int index = (y * width + x) * 3;
+        int index = (y * width + x) * 3;
 
-    pixels[index + 0] = r;
-    pixels[index + 1] = g;
-    pixels[index + 2] = b;
-
-
+        pixels[index + 0] = r;
+        pixels[index + 1] = g;
+        pixels[index + 2] = b;
     }
 
     int index = (y * width + x) * 3;
@@ -153,7 +150,7 @@ int main()
 
     CUDA_CHECK(cudaMalloc(&device_pixels, image_size));
 
-    dim3 block_size(16, 16);
+    dim3 block_size(8, 8);
 
     dim3 grid_size((width + block_size.x - 1) / block_size.x, (height + block_size.y - 1) / block_size.y);
 
@@ -162,11 +159,33 @@ int main()
 
     std::cout << "Block:" << block_size.x << "x" << block_size.y << std::endl;
 
+    cudaEvent_t start;
+    cudaEvent_t stop;
+
+    CUDA_CHECK(cudaEventCreate(&start));
+    CUDA_CHECK(cudaEventCreate(&stop));
+
+    CUDA_CHECK(cudaEventRecord(start));
+
     renderMandelbrot<<<grid_size, block_size>>>(device_pixels, width, height, max_iterations);
+
+    CUDA_CHECK(cudaEventRecord(stop));
+
+    CUDA_CHECK(cudaEventSynchronize(stop));
 
     CUDA_CHECK(cudaGetLastError());
 
     CUDA_CHECK(cudaDeviceSynchronize());
+
+    float kernel_time = 0.0f;
+
+    CUDA_CHECK(cudaEventElapsedTime(
+        &kernel_time,
+        start,
+        stop
+    ));
+
+    std::cout << "Kernel time:" << kernel_time << " ms" << std::endl;
 
     CUDA_CHECK(cudaMemcpy(
         host_pixels.data(),
